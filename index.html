@@ -33,8 +33,6 @@
         #loading { position: fixed; top:0; left:0; width:100%; height:100%; background:white; display:flex; justify-content:center; align-items:center; z-index:100; font-weight:bold; padding: 20px; text-align: center; flex-direction: column; }
     </style>
 </head>
-<body>
-
 <div id="loading">
     <div id="loading-text">กำลังเตรียมระบบ...</div>
 </div>
@@ -70,11 +68,9 @@
     </div>
 
     <div id="task-section" class="form-section">
-        <label>เลือกงาน</label>
+        <label>เลือกหมวดหมู่งานบ้าน (ดึงจาก Sheet)</label>
         <select id="taskName">
-            <option value="กรอกน้ำ">💧 กรอกน้ำ</option>
-            <option value="ล้างจาน">🍽️ ล้างจาน</option>
-            <option value="กวาดบ้าน">🧹 กวาดบ้าน</option>
+            <option>กำลังโหลดข้อมูล...</option>
         </select>
         <button class="btn-submit" style="background: var(--success);" onclick="submitTask()">บันทึกงานบ้าน</button>
     </div>
@@ -91,7 +87,7 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-    // ⚠️ สำคัญมาก: เอาลิงก์ Web App ของ Google Script มาใส่ตรงนี้!
+    // ⚠️ เอาลิงก์ Web App (URL ใหม่ที่เพิ่ง Deploy) มาใส่ในเครื่องหมายคำพูดด้านล่าง!
     const API_URL = "https://script.google.com/macros/s/AKfycby4ljSpWzaie9ex_ZUO2BBWi-HVCC_AB-Ew9wFXZZGTbb9SjSkGAjcSTjZaBprVWwzzrw/exec"; 
     
     let currentUserId = "";
@@ -102,7 +98,6 @@
         document.getElementById('task-section').classList.remove('show');
         document.getElementById('btn-fin').classList.remove('active');
         document.getElementById('btn-task').classList.remove('active');
-
         if(tab === 'finance') {
             document.getElementById('finance-section').classList.add('show');
             document.getElementById('btn-fin').classList.add('active');
@@ -118,7 +113,6 @@
 
         try {
             await liff.init({ liffId: "2009695499-nmuHKlil" });
-            
             if (!liff.isLoggedIn()) {
                 if(loadText) loadText.innerText = 'สเต็ป 2: กำลังเปิดหน้าล็อกอิน...';
                 liff.login({ redirectUri: window.location.href });
@@ -140,20 +134,21 @@
         }
     }
 
-    // --- เปลี่ยนการโหลดข้อมูลมาใช้ fetch() ---
+    // --- ฟังก์ชันหลักที่เชื่อมข้อมูลเข้าด้วยกัน ---
     async function loadDataFromServer() {
         let loadingBox = document.getElementById('loading');
         let loadText = document.getElementById('loading-text');
         
         try {
-            // ส่งคำสั่ง getUserData ไปที่ Google Script แบบ GET
-            let response = await fetch(`${API_URL}?action=getUserData&userId=${currentUserId}`);
+            // สำคัญมาก: ส่งชื่อเรา (userName) ไปให้หลังบ้านเช็คว่าเรากินน้ำไปกี่แก้วแล้ว!
+            let response = await fetch(`${API_URL}?action=getUserData&userName=${encodeURIComponent(currentUserName)}`);
             let stats = await response.json();
             
-            updateUI(stats.streak, stats.water);
-            fillCategories(stats.categories);
-            if(loadingBox) loadingBox.style.display = 'none'; 
+            updateUI(stats.streak, stats.water); // อัปเดตตัวเลขน้ำ
+            fillCategories(stats.categories);    // เติมหมวดหมู่เงิน
+            fillTaskCategories(stats.taskCategories); // เติมหมวดหมู่งานบ้าน!
             
+            if(loadingBox) loadingBox.style.display = 'none';
         } catch(err) {
             if(loadText) loadText.innerHTML = `<span style="color:red;">❌ เชื่อมต่อฐานข้อมูลไม่สำเร็จ: <br>${err.message}</span>`;
         }
@@ -187,7 +182,22 @@
         }
     }
 
-    // --- เปลี่ยนการบันทึกการเงินมาใช้ fetch() ---
+    // --- ฟังก์ชันใหม่: ดึงหมวดหมู่งานบ้านมาใส่ Dropdown ---
+    function fillTaskCategories(cats) {
+        let sel = document.getElementById('taskName');
+        if(!sel) return;
+        sel.innerHTML = "";
+        if(cats && cats.length > 0) {
+            cats.forEach(c => {
+                let opt = document.createElement('option');
+                opt.value = c; opt.innerText = c;
+                sel.appendChild(opt);
+            });
+        } else {
+             sel.innerHTML = "<option>ยังไม่มีข้อมูลใน Home_Tasks คอลัมน์ H</option>";
+        }
+    }
+
     async function submitFinance() {
         let btn = document.querySelector('#finance-section .btn-submit');
         let oldText = btn.innerText;
@@ -204,56 +214,57 @@
         };
         
         try {
-            // ส่งข้อมูลไปบันทึกแบบ POST
             await fetch(API_URL, {
                 method: 'POST',
                 body: JSON.stringify({ action: 'saveToSheet', data: data })
             });
             alert('บันทึกเงินสำเร็จ!'); 
-            // ✅ เคลียร์ช่องกรอกข้อมูลให้ว่าง เพื่อให้พิมพ์รายการต่อไปได้เลย
             document.getElementById('itemName').value = '';
             document.getElementById('amount').value = '';
             btn.innerText = oldText; 
             btn.disabled = false;
         } catch(err) {
-            alert('บันทึกไม่สำเร็จ: ' + err.message); 
+            alert('บันทึกไม่สำเร็จ: ' + err.message);
             btn.innerText = oldText; btn.disabled = false;
         }
     }
 
-    // --- เปลี่ยนการบันทึกงานบ้านมาใช้ fetch() ---
+    // --- ฟังก์ชันบันทึกงานบ้าน & น้ำ ---
     async function submitTask() {
         let btn = document.querySelector('#task-section .btn-submit');
         let oldText = btn.innerText;
         btn.innerText = "กำลังบันทึก..."; btn.disabled = true;
         
+        let selectedTask = document.getElementById('taskName').value;
+        let isWater = selectedTask.includes('น้ำ'); // โค้ดจะเช็คว่าในคำที่เลือกมีคำว่า "น้ำ" ไหม
+        
         const data = { 
-            type: 'task', 
+            type: isWater ? 'water' : 'task', 
             userId: currentUserId, 
             userName: currentUserName, 
-            task: document.getElementById('taskName').value 
+            category: selectedTask, // ส่งคำที่เลือก (เช่น กรอกน้ำ, ล้างจาน) กลับไปหลังบ้าน
+            task: selectedTask
         };
         
         try {
-            // ส่งข้อมูลไปบันทึกแบบ POST
             await fetch(API_URL, {
                 method: 'POST',
                 body: JSON.stringify({ action: 'saveToSheet', data: data })
             });
-            alert('บันทึกงานบ้านสำเร็จ!'); 
+            alert(isWater ? 'บันทึกการดื่มน้ำสำเร็จ!' : 'บันทึกงานบ้านสำเร็จ!'); 
             btn.innerText = oldText; btn.disabled = false;
             
+            // 🔄 โหลดข้อมูลใหม่เพื่ออัปเดตตัวเลขแก้วน้ำ (0/5 -> 1/5) อัตโนมัติ!
             let loadingBox = document.getElementById('loading');
             let loadText = document.getElementById('loading-text');
-            if(loadingBox) { loadingBox.style.display = 'flex'; loadText.innerText = 'กำลังโหลดข้อมูลใหม่...'; }
-            loadDataFromServer(); 
+            if(loadingBox) { loadingBox.style.display = 'flex'; loadText.innerText = 'กำลังอัปเดตข้อมูล...'; }
+            loadDataFromServer();
         } catch(err) {
-            alert('บันทึกไม่สำเร็จ: ' + err.message); 
+            alert('บันทึกไม่สำเร็จ: ' + err.message);
             btn.innerText = oldText; btn.disabled = false;
         }
     }
 
     main(); 
 </script>
-</body>
 </html>
