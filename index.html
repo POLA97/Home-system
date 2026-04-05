@@ -210,7 +210,11 @@
                 body: JSON.stringify({ action: 'saveToSheet', data: data })
             });
             alert('บันทึกเงินสำเร็จ!'); 
-            liff.closeWindow();
+            // ✅ เคลียร์ช่องกรอกข้อมูลให้ว่าง เพื่อให้พิมพ์รายการต่อไปได้เลย
+            document.getElementById('itemName').value = '';
+            document.getElementById('amount').value = '';
+            btn.innerText = oldText; 
+            btn.disabled = false;
         } catch(err) {
             alert('บันทึกไม่สำเร็จ: ' + err.message); 
             btn.innerText = oldText; btn.disabled = false;
