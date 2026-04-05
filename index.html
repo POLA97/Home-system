@@ -91,6 +91,9 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
+    // ⚠️ สำคัญมาก: เอาลิงก์ Web App ของ Google Script มาใส่ตรงนี้!
+    const API_URL = "ใส่ลิงก์_EXEC_ของ_GOOGLE_SCRIPT_ที่นี่"; 
+    
     let currentUserId = "";
     let currentUserName = "";
 
@@ -111,34 +114,16 @@
 
     async function main() {
         let loadText = document.getElementById('loading-text');
-        if(loadText) loadText.innerText = 'สเต็ป 1: กำลังเรียก LIFF... (รอไม่เกิน 5 วิ)';
-
-        // 💣 ติดระเบิดเวลา 5 วินาที ถ้าค้าง ให้แสดงข้อความนี้
-        let hangDetector = setTimeout(() => {
-            if(loadText) {
-                loadText.innerHTML = `
-                    <span style="color:red; font-size:18px;">❌ ระบบ LIFF ไม่ตอบสนอง (ค้าง)!</span><br><br>
-                    <span style="color:#333; font-size:14px; text-align:left; display:block; padding:10px;">
-                    <b>วิธีแก้ปัญหา (ทำที่มือถือคุณ):</b><br>
-                    1. <b>ถ้าใช้ iPhone:</b> ไปที่ตั้งค่า (Settings) > Safari > ปิด "ป้องกันการติดตามข้ามไซต์" (Prevent Cross-Site Tracking)<br>
-                    2. <b>เคลียร์แคช LINE:</b> ไปที่หน้าหลัก LINE > ฟันเฟือง (ตั้งค่า) > แชท > ลบข้อมูล > กดลบ "ข้อมูลแคช"
-                    </span>
-                `;
-            }
-        }, 5000);
+        if(loadText) loadText.innerText = 'สเต็ป 1: กำลังเรียก LIFF...';
 
         try {
-            // เริ่มเรียก LIFF
             await liff.init({ liffId: "2009695499-nmuHKlil" });
-            
-            // 🟢 ถ้าคำสั่งด้านบนผ่าน จะมายกเลิกระเบิดเวลาบรรทัดนี้
-            clearTimeout(hangDetector); 
             
             if (!liff.isLoggedIn()) {
                 if(loadText) loadText.innerText = 'สเต็ป 2: กำลังเปิดหน้าล็อกอิน...';
-                liff.login({ redirectUri: "https://liff.line.me/2009695499-nmuHKlil" });
+                liff.login({ redirectUri: window.location.href });
             } else {
-                if(loadText) loadText.innerText = 'สเต็ป 3: ดึงข้อมูลโปรไฟล์ LINE...';
+                if(loadText) loadText.innerText = 'สเต็ป 3: ดึงข้อมูลโปรไฟล์...';
                 const profile = await liff.getProfile();
                 currentUserId = profile.userId;
                 currentUserName = profile.displayName;
@@ -146,33 +131,34 @@
                 let greeting = document.getElementById('user-greeting');
                 if(greeting) greeting.innerText = "🏠 สวัสดี, " + currentUserName;
                 
-                if(loadText) loadText.innerText = 'สเต็ป 4: โหลดข้อมูลจาก Google Sheet...';
+                if(loadText) loadText.innerText = 'สเต็ป 4: โหลดข้อมูลจากระบบ...';
                 loadDataFromServer();
             }
         } catch (err) {
-            clearTimeout(hangDetector); // ถ้าระบบแจ้ง Error ออกมาตรงๆ ก็ยกเลิกระเบิดเหมือนกัน
             console.error("LIFF Error:", err);
             if(loadText) loadText.innerHTML = `<span style="color:red;">❌ พังที่ระบบ LIFF: <br>${err.message}</span>`;
         }
     }
 
-    function loadDataFromServer() {
+    // --- เปลี่ยนการโหลดข้อมูลมาใช้ fetch() ---
+    async function loadDataFromServer() {
         let loadingBox = document.getElementById('loading');
         let loadText = document.getElementById('loading-text');
         
-        google.script.run
-            .withSuccessHandler(function(stats) {
-                updateUI(stats.streak, stats.water);
-                fillCategories(stats.categories);
-                if(loadingBox) loadingBox.style.display = 'none'; 
-            })
-            .withFailureHandler(function(err) {
-                if(loadText) loadText.innerHTML = `<span style="color:red;">❌ พังที่ Google Script: <br>${err.message}</span>`;
-            })
-            .getUserData(currentUserId);
+        try {
+            // ส่งคำสั่ง getUserData ไปที่ Google Script แบบ GET
+            let response = await fetch(`${API_URL}?action=getUserData&userId=${currentUserId}`);
+            let stats = await response.json();
+            
+            updateUI(stats.streak, stats.water);
+            fillCategories(stats.categories);
+            if(loadingBox) loadingBox.style.display = 'none'; 
+            
+        } catch(err) {
+            if(loadText) loadText.innerHTML = `<span style="color:red;">❌ เชื่อมต่อฐานข้อมูลไม่สำเร็จ: <br>${err.message}</span>`;
+        }
     }
 
-    // ฟังก์ชัน updateUI, fillCategories, submitFinance, submitTask ใช้ของเดิมได้เลยครับ ไม่ต้องแก้
     function updateUI(streak, water) {
         let sNum = document.getElementById('streak-num');
         let wText = document.getElementById('water-text');
@@ -201,32 +187,66 @@
         }
     }
 
-    function submitFinance() {
+    // --- เปลี่ยนการบันทึกการเงินมาใช้ fetch() ---
+    async function submitFinance() {
         let btn = document.querySelector('#finance-section .btn-submit');
         let oldText = btn.innerText;
         btn.innerText = "กำลังบันทึก..."; btn.disabled = true;
-        const data = { type: 'finance', userId: currentUserId, userName: currentUserName, action: document.getElementById('action').value, category: document.getElementById('category').value, item: document.getElementById('itemName').value, amount: document.getElementById('amount').value };
-        google.script.run
-            .withSuccessHandler(() => { alert('บันทึกเงินสำเร็จ!'); liff.closeWindow(); })
-            .withFailureHandler((err) => { alert('บันทึกไม่สำเร็จ: ' + err.message); btn.innerText = oldText; btn.disabled = false; })
-            .saveToSheet(data);
+        
+        const data = { 
+            type: 'finance', 
+            userId: currentUserId, 
+            userName: currentUserName, 
+            action: document.getElementById('action').value, 
+            category: document.getElementById('category').value, 
+            item: document.getElementById('itemName').value, 
+            amount: document.getElementById('amount').value 
+        };
+        
+        try {
+            // ส่งข้อมูลไปบันทึกแบบ POST
+            await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action: 'saveToSheet', data: data })
+            });
+            alert('บันทึกเงินสำเร็จ!'); 
+            liff.closeWindow();
+        } catch(err) {
+            alert('บันทึกไม่สำเร็จ: ' + err.message); 
+            btn.innerText = oldText; btn.disabled = false;
+        }
     }
 
-    function submitTask() {
+    // --- เปลี่ยนการบันทึกงานบ้านมาใช้ fetch() ---
+    async function submitTask() {
         let btn = document.querySelector('#task-section .btn-submit');
         let oldText = btn.innerText;
         btn.innerText = "กำลังบันทึก..."; btn.disabled = true;
-        const data = { type: 'task', userId: currentUserId, userName: currentUserName, task: document.getElementById('taskName').value };
-        google.script.run
-            .withSuccessHandler(() => { 
-                alert('บันทึกงานบ้านสำเร็จ!'); btn.innerText = oldText; btn.disabled = false;
-                let loadingBox = document.getElementById('loading');
-                let loadText = document.getElementById('loading-text');
-                if(loadingBox) { loadingBox.style.display = 'flex'; loadText.innerText = 'กำลังโหลดข้อมูลใหม่...'; }
-                loadDataFromServer(); 
-            })
-            .withFailureHandler((err) => { alert('บันทึกไม่สำเร็จ: ' + err.message); btn.innerText = oldText; btn.disabled = false; })
-            .saveToSheet(data);
+        
+        const data = { 
+            type: 'task', 
+            userId: currentUserId, 
+            userName: currentUserName, 
+            task: document.getElementById('taskName').value 
+        };
+        
+        try {
+            // ส่งข้อมูลไปบันทึกแบบ POST
+            await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action: 'saveToSheet', data: data })
+            });
+            alert('บันทึกงานบ้านสำเร็จ!'); 
+            btn.innerText = oldText; btn.disabled = false;
+            
+            let loadingBox = document.getElementById('loading');
+            let loadText = document.getElementById('loading-text');
+            if(loadingBox) { loadingBox.style.display = 'flex'; loadText.innerText = 'กำลังโหลดข้อมูลใหม่...'; }
+            loadDataFromServer(); 
+        } catch(err) {
+            alert('บันทึกไม่สำเร็จ: ' + err.message); 
+            btn.innerText = oldText; btn.disabled = false;
+        }
     }
 
     main(); 
